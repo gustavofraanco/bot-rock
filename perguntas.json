@@ -1,0 +1,20 @@
+[
+  {
+    "arquivo": "pergunta1.webp",
+    "enunciado": "Qual é o nome deste pokémon?",
+    "resposta": "pikachu",
+    "tempo": 30
+  },
+  {
+    "arquivo": "pergunta2.webp",
+    "enunciado": "Identifique o personagem da imagem.",
+    "resposta": "naruto",
+    "tempo": 45
+  },
+  {
+    "arquivo": "pergunta3.webp",
+    "enunciado": "Qual é o nome desta obra de arte?",
+    "resposta": "monalisa",
+    "tempo": 60
+  }
+]
