@@ -20,16 +20,11 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
-        """Nova proporção de tempo solicitada."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15:
-            return 20
-        elif 10 <= qtd < 15:
-            return 13
-        elif 3 <= qtd < 10:
-            return 7
-        else: # Exatamente 2 pessoas
-            return 5
+        if qtd >= 15: return 20
+        elif 10 <= qtd < 15: return 13
+        elif 3 <= qtd < 10: return 7
+        else: return 5
 
     @property
     def is_ultima_rodada(self) -> bool:
@@ -68,20 +63,15 @@ class Partida:
             else:
                 sucesso = await self._rodar_rodada_normal(pergunta, tempo)
 
-            # Lógica: Se NINGUÉM acertou (sucesso = False), repete a rodada (não avança o index)
             if sucesso:
                 idx_pergunta += 1
             else:
-                # Opcional: Avisar que a rodada será repetida
-                embed_repetir = discord.Embed(
-                    description="⚠️ **Ninguém acertou!** A rodada será reiniciada com uma nova imagem.",
-                    color=0x3498db
-                )
-                await self.canal.send(embed=embed_repetir)
-                # Sorteamos uma nova pergunta para substituir a que ninguém acertou
+                # Se ninguém acertou, esperamos 10 segundos antes de reiniciar a rodada
+                await asyncio.sleep(10)
+                # Sorteamos uma nova pergunta
                 nova_pergunta = sortear_perguntas(1)[0]
                 self.perguntas[idx_pergunta] = nova_pergunta
-                self.rodada_atual -= 1 # Mantém o número da rodada visualmente igual
+                self.rodada_atual -= 1 
 
             if len(self.jogadores_ativos) == 1:
                 self.vencedor = self.jogadores_ativos[0]
@@ -104,23 +94,19 @@ class Partida:
                 msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, restante))
                 if msg.author not in acertos_em_ordem and validar_resposta(msg.content, resposta_correta):
                     acertos_em_ordem.append(msg.author)
-                    await msg.add_reaction(EMOJI_ACERTO)
+                    try: await msg.add_reaction(EMOJI_ACERTO)
+                    except: pass
             except asyncio.TimeoutError:
                 break
 
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
         
-        # Se ninguém acertou, retorna False para repetir a rodada
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
 
-        eliminados = []
-        for j in self.jogadores_ativos:
-            if j not in acertos_em_ordem:
-                eliminados.append(j)
-        
-        if not eliminados: # Todos acertaram
+        eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
+        if not eliminados:
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
@@ -142,41 +128,32 @@ class Partida:
                 perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
                 return True
-            else:
-                # Primeiro a responder errou, mas precisamos ver se alguém acerta depois ou se ninguém acertou
-                # Para simplificar a regra de "ninguém acertou" na final:
-                return False
+            return False
         except asyncio.TimeoutError:
             await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
             return False
 
     async def _anunciar_eliminados(self, resposta, eliminados, ninguem_acertou=False):
         if ninguem_acertou:
-            embed = discord.Embed(
-                description=(
-                    "# <:fale_finalizada:1488692025984553241> Rodada anulada!\n"
-                    f"• A resposta era `{resposta}`\n"
-                    "**Ninguém acertou!** Ninguém foi eliminado."
-                ),
-                color=0xF1C40F
+            description = (
+                "# <:fale_finalizada:1488692025984553241> Rodada anulada!\n"
+                f"• A resposta era `{resposta}`\n"
+                "<:dale_atencao:1478412503036989480> **Ninguém acertou!** A rodada será reiniciada com uma nova imagem."
             )
         else:
             for j in eliminados:
                 if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
                 try: await j.remove_roles(self.cargo_resta1)
                 except: pass
-
             mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
-            embed = discord.Embed(
-                description=(
-                    "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
-                    f"• A resposta era `{resposta}`\n"
-                    "Jogador(es) eliminado(os):\n"
-                    f"{mencoes}"
-                ),
-                color=0xF1C40F
+            description = (
+                "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
+                f"• A resposta era `{resposta}`\n"
+                "Jogador(es) eliminado(os):\n"
+                f"{mencoes}"
             )
         
+        embed = discord.Embed(description=description, color=0xF1C40F)
         icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
         embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
         await self.canal.send(embed=embed)
@@ -194,8 +171,10 @@ class Partida:
             color=0x060606
         )
         caminho = get_caminho_imagem(pergunta["arquivo"])
-        file = discord.File(caminho, filename=pergunta["arquivo"])
-        embed.set_image(url=f"attachment://{pergunta['arquivo']}")
+        # Geramos um nome único para o anexo para evitar que o Discord use cache de imagens pequenas
+        nome_anexo = f"rodada_{self.rodada_atual}_{pergunta['arquivo']}"
+        file = discord.File(caminho, filename=nome_anexo)
+        embed.set_image(url=f"attachment://{nome_anexo}")
         await self.canal.send(file=file, embed=embed)
 
     async def _encerrar(self):
