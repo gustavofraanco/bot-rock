@@ -20,11 +20,16 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
+        """Nova proporção de tempo solicitada."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15: return 20
-        elif 10 <= qtd < 15: return 13
-        elif 5 <= qtd < 10: return 7
-        else: return 4
+        if qtd >= 15:
+            return 20
+        elif 10 <= qtd < 15:
+            return 13
+        elif 3 <= qtd < 10:
+            return 7
+        else: # Exatamente 2 pessoas
+            return 5
 
     @property
     def is_ultima_rodada(self) -> bool:
@@ -42,72 +47,86 @@ class Partida:
             ),
             color=0x060606
         )
-        embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg?ex=69cdc5c4&is=69cc7444&hm=c958b56450e99955be6ba46c9f4f696eb39d6c0b2cfe1aab94160edfad32fdc4")
+        embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg")
         await self.canal.send(embed=embed)
         await asyncio.sleep(10)
 
     async def executar(self):
         await self.anunciar_inicio()
-        for i, pergunta in enumerate(self.perguntas):
+        
+        idx_pergunta = 0
+        while idx_pergunta < len(self.perguntas):
             if not self.ativa or len(self.jogadores_ativos) <= 1:
                 break
-            self.rodada_atual = i + 1
+            
+            pergunta = self.perguntas[idx_pergunta]
+            self.rodada_atual += 1
             tempo = self.calcular_tempo_dinamico()
+
             if self.is_ultima_rodada:
-                await self._rodar_ultima_rodada(pergunta, tempo)
-                break
+                sucesso = await self._rodar_ultima_rodada(pergunta, tempo)
             else:
-                await self._rodar_rodada_normal(pergunta, tempo)
+                sucesso = await self._rodar_rodada_normal(pergunta, tempo)
+
+            # Lógica: Se NINGUÉM acertou (sucesso = False), repete a rodada (não avança o index)
+            if sucesso:
+                idx_pergunta += 1
+            else:
+                # Opcional: Avisar que a rodada será repetida
+                embed_repetir = discord.Embed(
+                    description="⚠️ **Ninguém acertou!** A rodada será reiniciada com uma nova imagem.",
+                    color=0x3498db
+                )
+                await self.canal.send(embed=embed_repetir)
+                # Sorteamos uma nova pergunta para substituir a que ninguém acertou
+                nova_pergunta = sortear_perguntas(1)[0]
+                self.perguntas[idx_pergunta] = nova_pergunta
+                self.rodada_atual -= 1 # Mantém o número da rodada visualmente igual
+
             if len(self.jogadores_ativos) == 1:
                 self.vencedor = self.jogadores_ativos[0]
                 break
+
         await self._encerrar()
 
-    async def _rodar_rodada_normal(self, pergunta: dict, tempo: int):
+    async def _rodar_rodada_normal(self, pergunta: dict, tempo: int) -> bool:
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
         acertos_em_ordem = []
-        respondeu_errado = []
 
         def check(m):
             return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
 
         inicio = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - inicio < tempo:
-            # Se todos já interagiram, podemos encerrar o tempo mais cedo
-            if len(acertos_em_ordem) + len(respondeu_errado) == len(self.jogadores_ativos):
-                break
-            
             restante = tempo - (asyncio.get_event_loop().time() - inicio)
             try:
                 msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, restante))
-                if msg.author in acertos_em_ordem or msg.author in respondeu_errado:
-                    continue
-
-                if validar_resposta(msg.content, resposta_correta):
+                if msg.author not in acertos_em_ordem and validar_resposta(msg.content, resposta_correta):
                     acertos_em_ordem.append(msg.author)
-                    try: await msg.add_reaction(EMOJI_ACERTO)
-                    except: pass
-                else:
-                    respondeu_errado.append(msg.author)
+                    await msg.add_reaction(EMOJI_ACERTO)
             except asyncio.TimeoutError:
                 break
 
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
         
+        # Se ninguém acertou, retorna False para repetir a rodada
+        if not acertos_em_ordem:
+            await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
+            return False
+
         eliminados = []
-        # 1. Quem errou ou não respondeu
         for j in self.jogadores_ativos:
             if j not in acertos_em_ordem:
                 eliminados.append(j)
         
-        # 2. Se todos acertaram, o último a acertar é eliminado
-        if not eliminados and len(acertos_em_ordem) == len(self.jogadores_ativos):
+        if not eliminados: # Todos acertaram
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
+        return True
 
-    async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int):
+    async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int) -> bool:
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
         
@@ -122,12 +141,45 @@ class Partida:
                 self.vencedor = msg.author
                 perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
+                return True
             else:
-                # Se o primeiro a responder na final errar, ele perde
-                await self._anunciar_eliminados(pergunta["resposta"], [msg.author])
+                # Primeiro a responder errou, mas precisamos ver se alguém acerta depois ou se ninguém acertou
+                # Para simplificar a regra de "ninguém acertou" na final:
+                return False
         except asyncio.TimeoutError:
             await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-            await self._anunciar_eliminados(pergunta["resposta"], [self.jogadores_ativos[0]])
+            return False
+
+    async def _anunciar_eliminados(self, resposta, eliminados, ninguem_acertou=False):
+        if ninguem_acertou:
+            embed = discord.Embed(
+                description=(
+                    "# <:fale_finalizada:1488692025984553241> Rodada anulada!\n"
+                    f"• A resposta era `{resposta}`\n"
+                    "**Ninguém acertou!** Ninguém foi eliminado."
+                ),
+                color=0xF1C40F
+            )
+        else:
+            for j in eliminados:
+                if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
+                try: await j.remove_roles(self.cargo_resta1)
+                except: pass
+
+            mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
+            embed = discord.Embed(
+                description=(
+                    "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
+                    f"• A resposta era `{resposta}`\n"
+                    "Jogador(es) eliminado(os):\n"
+                    f"{mencoes}"
+                ),
+                color=0xF1C40F
+            )
+        
+        icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
+        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
+        await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         embed = discord.Embed(
@@ -145,26 +197,6 @@ class Partida:
         file = discord.File(caminho, filename=pergunta["arquivo"])
         embed.set_image(url=f"attachment://{pergunta['arquivo']}")
         await self.canal.send(file=file, embed=embed)
-
-    async def _anunciar_eliminados(self, resposta, eliminados):
-        for j in eliminados:
-            if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
-            try: await j.remove_roles(self.cargo_resta1)
-            except: pass
-
-        mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
-        embed = discord.Embed(
-            description=(
-                "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
-                f"• A resposta era `{resposta}`\n"
-                "Jogador(es) eliminado(os):\n"
-                f"{mencoes if mencoes else 'Ninguém'}"
-            ),
-            color=0xF1C40F
-        )
-        icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
-        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
-        await self.canal.send(embed=embed)
 
     async def _encerrar(self):
         self.ativa = False
