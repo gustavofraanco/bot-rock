@@ -168,14 +168,24 @@ class Partida:
         )
         
         try:
-            # SEMPRE pega da pasta local agora
-            caminho = get_caminho_imagem(nome_arquivo)
+            # DEFINE O CAMINHO DIRETO: Pasta 'imagens' no mesmo local do game.py
+            diretorio_atual = os.path.dirname(os.path.abspath(__file__))
+            caminho = os.path.join(diretorio_atual, "imagens", nome_arquivo)
+            
+            # DEBUG: Isso vai mostrar no seu terminal onde o bot está tentando olhar
+            if not os.path.exists(caminho):
+                print(f"❌ ARQUIVO NÃO ENCONTRADO: {caminho}")
+                await self.canal.send(f"⚠️ Não achei o arquivo `{nome_arquivo}` na pasta `imagens`.", embed=embed)
+                return
+
             file = discord.File(caminho, filename=nome_final)
             embed.set_image(url=f"attachment://{nome_final}")
+            
             await self.canal.send(file=file, embed=embed)
+            
         except Exception as e:
-            print(f"Erro ao carregar imagem local {nome_arquivo}: {e}")
-            await self.canal.send(f"⚠️ Erro ao carregar a imagem: {nome_arquivo}", embed=embed)
+            print(f"❌ ERRO AO ENVIAR: {e}")
+            await self.canal.send(f"⚠️ Erro técnico: {e}", embed=embed
 
     async def _encerrar(self):
         self.ativa = False
