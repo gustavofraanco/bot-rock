@@ -1,6 +1,7 @@
 import discord
 from discord import app_commands
 import os
+import time
 from dotenv import load_dotenv
 from game import Partida
 
@@ -17,6 +18,7 @@ class MyBot(discord.Client):
     def __init__(self):
         super().__init__(intents=intents)
         self.tree = app_commands.CommandTree(self)
+        self.partida_atual = None  # Para podermos finalizar a partida depois
 
     async def setup_hook(self):
         # Sincroniza os comandos com o Discord
@@ -30,15 +32,11 @@ async def on_ready():
 
 @bot.tree.command(name="resta1", description="Inicia uma partida de Resta 1")
 async def resta1(interaction: discord.Interaction):
-    """
-    Comando para iniciar o jogo. 
-    Usa defer() para evitar o erro 10062 (Unknown Interaction).
-    """
-    try:
-        # 1. AVISO AO DISCORD: "Estou processando, não expire o comando!"
-        await interaction.response.defer(ephemeral=False)
+    """Inicia o jogo usando defer para evitar erro 10062."""
+    await interaction.response.defer(ephemeral=False)
 
-        # Configurações da partida (ajuste os IDs conforme seu servidor)
+    try:
+        # Puxa os IDs direto do seu .env (Nomes devem estar iguais aos do arquivo)
         ID_CANAL_JOGO = int(os.getenv("CANAL_JOGO_ID"))
         ID_CARGO_JOGADOR = int(os.getenv("CARGO_RESTA1_ID"))
         
@@ -46,19 +44,18 @@ async def resta1(interaction: discord.Interaction):
         cargo_participante = interaction.guild.get_role(ID_CARGO_JOGADOR)
 
         if not canal_jogo or not cargo_participante:
-            await interaction.followup.send("❌ Erro: Canal ou Cargo não encontrados. Verifique os IDs no bot.py.")
+            await interaction.followup.send("❌ Erro: Verifique os IDs de Canal e Cargo no seu arquivo .env")
             return
 
-        # Filtra os membros que possuem o cargo para iniciar a lista de jogadores
+        # Filtra os membros com o cargo
         jogadores = [m for m in interaction.guild.members if cargo_participante in m.roles and not m.bot]
 
         if len(jogadores) < 2:
-            await interaction.followup.send(f"❌ Precisamos de pelo semos 2 jogadores com o cargo {cargo_participante.mention} para começar.")
+            await interaction.followup.send(f"❌ Mínimo de 2 jogadores com o cargo {cargo_participante.mention} para começar.")
             return
 
-        # 2. INICIA A LÓGICA DA PARTIDA
-        # Criamos a instância da Partida (que agora usa apenas imagens locais)
-        nova_partida = Partida(
+        # Inicia a instância da Partida
+        bot.partida_atual = Partida(
             bot=bot,
             jogadores=jogadores,
             canal=canal_jogo,
@@ -67,20 +64,31 @@ async def resta1(interaction: discord.Interaction):
             tempo_padrao=15
         )
 
-        # 3. CONFIRMAÇÃO FINAL: Usamos followup.send porque já demos o defer()
-        await interaction.followup.send(f"✅ Partida de **Resta 1** iniciada em {canal_jogo.mention}!")
+        await interaction.followup.send(f"✅ Partida iniciada em {canal_jogo.mention}!")
         
-        # Começa a execução do jogo
-        await nova_partida.executar()
+        # Executa o loop do jogo
+        await bot.partida_atual.executar()
 
     except Exception as e:
-        print(f"❌ Erro ao iniciar comando resta1: {e}")
-        # Se der erro, tentamos avisar via followup
+        print(f"❌ Erro no comando resta1: {e}")
         try:
-            await interaction.followup.send(f"⚠️ Ocorreu um erro ao tentar iniciar o jogo: {e}")
+            await interaction.followup.send(f"⚠️ Erro ao iniciar: {e}")
         except:
             pass
 
-# Roda o bot
+@bot.tree.command(name="finalizar", description="Finaliza a partida atual imediatamente")
+async def finalizar(interaction: discord.Interaction):
+    """Interrompe a partida que está acontecendo."""
+    if bot.partida_atual and bot.partida_atual.ativa:
+        bot.partida_atual.finalizar_forcado()
+        await interaction.response.send_message("🛑 A partida foi finalizada manualmente!", ephemeral=False)
+        bot.partida_atual = None
+    else:
+        await interaction.response.send_message("❌ Não há nenhuma partida rodando no momento.", ephemeral=True)
+
+# Execução principal
 if __name__ == "__main__":
-    bot.run(TOKEN)
+    if not TOKEN:
+        print("❌ ERRO: Variável TOKEN não encontrada. Verifique seu .env")
+    else:
+        bot.run(TOKEN)
