@@ -185,6 +185,6 @@ class Partida:
     async def _encerrar(self):
         self.ativa = False
         if self.vencedor:
-            embed = discord.Embed(description=f"# <:fale_vencedor:1488653915464663060> Resta apenas 1!\nParabéns, {self.vencedor.mention}! Você venceu! <:dale_eventos:1478383216581672982>", color=0xF1C40F)
+            embed = discord.Embed(description=f"# <:fale_vencedor:1488653915464663060> Resta apenas 1!\nParabéns, {self.vencedor.mention}! Você venceu! <:dale_eventos:1478383216581672982>", color=0xEB7309)
             embed.set_thumbnail(url="https://media.discordapp.net/attachments/1475457661842751548/1488696064579076157/IMG_9600.png?ex=69cdb7c0&is=69cc6640&hm=49e2a616a13482ebc95a0d1edd44a1ed4d14a7574dce86e7e7272a855753b107&=&format=webp&quality=lossless")
             await self.canal.send(embed=embed)
