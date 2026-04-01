@@ -31,8 +31,7 @@ class Partida:
         return len(self.jogadores_ativos) == 2
 
     async def anunciar_inicio(self):
-        """Embed de Início da Partida (#060606)"""
-        mencoes = " ".join(j.mention for j in self.jogadores_ativos)
+        """Embed RESTA 1 - ALEMÃO atualizado (#060606)"""
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
@@ -40,15 +39,16 @@ class Partida:
                 "## <:gaale_regras:1488678788115075072> Instruções\n\n"
                 "• A cada rodada, o **último a responder** é eliminado.\n"
                 "• Na rodada final, o **primeiro a acertar** vence!\n\n"
-                "<:fale_tempo:1488683795422122065> Inicia em **10** segundos...\n\n"
-                f"{mencoes}"
+                "<:fale_tempo:1488683795422122065> Inicia em **10** segundos..."
             ),
             color=discord.Color(0x060606)
         )
+        embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg?ex=69cdc5c4&is=69cc7444&hm=c958b56450e99955be6ba46c9f4f696eb39d6c0b2cfe1aab94160edfad32fdc4&=&format=webp")
         await self.canal.send(embed=embed)
         await asyncio.sleep(10)
 
     async def executar(self):
+        # O embed antigo "A Partida Começou" foi removido daqui
         await self.anunciar_inicio()
         
         for i, pergunta in enumerate(self.perguntas):
@@ -71,8 +71,7 @@ class Partida:
         await self._encerrar()
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int):
-        jogadores_mencao = " ".join(j.mention for j in self.jogadores_ativos)
-        await self._enviar_embed_pergunta(pergunta, tempo, jogadores_mencao)
+        await self._enviar_embed_pergunta(pergunta, tempo) # Menções removidas
 
         resposta_correta = pergunta["resposta"]
         respostas: dict[discord.Member, discord.Message] = {}
@@ -94,7 +93,6 @@ class Partida:
             except asyncio.TimeoutError:
                 break
 
-        # Embed de Tempo Esgotado (#EB7309)
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
 
         eliminados: list[discord.Member] = []
@@ -106,12 +104,10 @@ class Partida:
         if todos_acertaram and acertos_em_ordem:
             eliminados.append(acertos_em_ordem[-1])
 
-        # Embed de Rodada Finalizada (#F1C40F)
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
 
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int):
-        jogadores_mencao = " ".join(j.mention for j in self.jogadores_ativos)
-        await self._enviar_embed_pergunta(pergunta, tempo, jogadores_mencao, final=True)
+        await self._enviar_embed_pergunta(pergunta, tempo) # (FINAL) e Menções removidas
 
         resposta_correta = pergunta["resposta"]
         mensagens_enviadas: list[discord.Message] = []
@@ -140,17 +136,16 @@ class Partida:
         await self._anunciar_eliminados(pergunta["resposta"], [eliminado])
         if self.jogadores_ativos: self.vencedor = self.jogadores_ativos[0]
 
-    async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int, mencoes: str, final=False):
-        rodada_str = f"**{self.rodada_atual} (FINAL)**" if final else f"**{self.rodada_atual}**"
+    async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
+        # Removido o parâmetro de menções e a lógica de (FINAL)
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
                 "ㅤ\n"
                 "Rodada\n"
-                f"<:fale_rodada:1488649428989382987> {rodada_str}\n"
+                f"<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\n"
                 "Tempo\n"
-                f"<:fale_cronometro:1488631115001626785> **{tempo}**s\n\n"
-                f"{mencoes}"
+                f"<:fale_cronometro:1488631115001626785> **{tempo}**s"
             ),
             color=0x060606
         )
@@ -175,7 +170,9 @@ class Partida:
             ),
             color=0xF1C40F
         )
-        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores")
+        # Footer com ícone personalizado solicitado
+        icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
+        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
         await self.canal.send(embed=embed)
 
     async def _encerrar(self):
