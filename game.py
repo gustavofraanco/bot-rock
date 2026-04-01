@@ -1,6 +1,7 @@
 import asyncio
 import os
 import discord
+import time
 from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
@@ -20,17 +21,23 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
+        """Proporção de tempo solicitada: 20s, 13s, 7s e 5s."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15: return 20
-        elif 10 <= qtd < 15: return 13
-        elif 3 <= qtd < 10: return 7
-        else: return 5
+        if qtd >= 15:
+            return 20
+        elif 10 <= qtd < 15:
+            return 13
+        elif 3 <= qtd < 10:
+            return 7
+        else: # Só 2 pessoas
+            return 5
 
     @property
     def is_ultima_rodada(self) -> bool:
         return len(self.jogadores_ativos) == 2
 
     async def anunciar_inicio(self):
+        """Embed de introdução com imagem e regras."""
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
@@ -65,11 +72,11 @@ class Partida:
 
             if sucesso:
                 idx_pergunta += 1
-                # Espera 10 segundos antes da próxima imagem, se não for o fim do jogo
+                # Distância de 10s entre rodadas se o jogo continuar
                 if idx_pergunta < len(self.perguntas) and len(self.jogadores_ativos) > 1:
                     await asyncio.sleep(10)
             else:
-                # Ninguém acertou: espera 10s e troca a pergunta para repetir a mesma rodada
+                # Ninguém acertou: espera 10s e repete a rodada com nova imagem
                 await asyncio.sleep(10)
                 nova_pergunta = sortear_perguntas(1)[0]
                 self.perguntas[idx_pergunta] = nova_pergunta
@@ -107,7 +114,7 @@ class Partida:
             return False
 
         eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
-        if not eliminados:
+        if not eliminados: # Se todos acertaram, o último sai
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
@@ -124,15 +131,13 @@ class Partida:
             msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=tempo)
             
             if validar_resposta(msg.content, resposta_correta):
-                await msg.add_reaction(EMOJI_ACERTO) # Reação adicionada na última rodada
+                await msg.add_reaction(EMOJI_ACERTO)
                 await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
                 self.vencedor = msg.author
                 perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
                 return True
-            else:
-                await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-                return False
+            return False
         except asyncio.TimeoutError:
             await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
             return False
@@ -163,6 +168,10 @@ class Partida:
         await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
+        """Envia a pergunta com ID único para garantir qualidade máxima da imagem."""
+        unique_id = int(time.time())
+        nome_arquivo_unico = f"img_{unique_id}_{pergunta['arquivo']}"
+        
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -174,9 +183,10 @@ class Partida:
             ),
             color=0x060606
         )
+        
         caminho = get_caminho_imagem(pergunta["arquivo"])
-        file = discord.File(caminho, filename="imagem_pergunta.png")
-        embed.set_image(url="attachment://imagem_pergunta.png")
+        file = discord.File(caminho, filename=nome_arquivo_unico)
+        embed.set_image(url=f"attachment://{nome_arquivo_unico}")
         await self.canal.send(file=file, embed=embed)
 
     async def _encerrar(self):
