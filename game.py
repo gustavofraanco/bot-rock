@@ -7,8 +7,20 @@ from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
 
-with open("urls.json", "r", encoding="utf-8") as f:  
-    URLS_IMAGENS: dict = json.load(f)
+# --- BLOCO DE CARREGAMENTO CORRIGIDO ---
+URLS_IMAGENS = {}
+try:
+    # Tenta abrir no formato padrão (UTF-8)
+    with open("urls.json", "r", encoding="utf-8") as f:
+        URLS_IMAGENS = json.load(f)
+except (UnicodeDecodeError, json.JSONDecodeError):
+    try:
+        # Se der erro de caractere (comum no Windows), tenta o formato do sistema (CP1252)
+        with open("urls.json", "r", encoding="cp1252") as f:
+            URLS_IMAGENS = json.load(f)
+    except Exception as e:
+        print(f"Erro crítico ao carregar urls.json: {e}")
+# ---------------------------------------
 
 class Partida:
     def finalizar_forcado(self):
@@ -56,16 +68,13 @@ class Partida:
 
     async def executar(self):
         await self.anunciar_inicio()
-        
         idx_pergunta = 0
         while idx_pergunta < len(self.perguntas):
             if not self.ativa or len(self.jogadores_ativos) <= 1:
                 break
-            
             pergunta = self.perguntas[idx_pergunta]
             self.rodada_atual += 1
             tempo = self.calcular_tempo_dinamico()
-
             if self.is_ultima_rodada:
                 sucesso = await self._rodar_ultima_rodada(pergunta, tempo)
             else:
@@ -76,7 +85,6 @@ class Partida:
                 if idx_pergunta < len(self.perguntas) and len(self.jogadores_ativos) > 1:
                     await asyncio.sleep(10)
             else:
-                # Ninguém acertou: chama o delay de 10s e reinicia
                 await asyncio.sleep(10)
                 nova_pergunta = sortear_perguntas(1)[0]
                 self.perguntas[idx_pergunta] = nova_pergunta
@@ -85,17 +93,13 @@ class Partida:
             if len(self.jogadores_ativos) == 1:
                 self.vencedor = self.jogadores_ativos[0]
                 break
-
         await self._encerrar()
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int) -> bool:
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
         acertos_em_ordem = []
-
-        def check(m):
-            return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
-
+        def check(m): return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
         inicio = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - inicio < tempo:
             restante = tempo - (asyncio.get_event_loop().time() - inicio)
@@ -104,33 +108,22 @@ class Partida:
                 if msg.author not in acertos_em_ordem and validar_resposta(msg.content, resposta_correta):
                     acertos_em_ordem.append(msg.author)
                     await msg.add_reaction(EMOJI_ACERTO)
-            except asyncio.TimeoutError:
-                break
-
+            except asyncio.TimeoutError: break
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
-        
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
-
         eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
-        if not eliminados:
-            eliminados.append(acertos_em_ordem[-1])
-
+        if not eliminados: eliminados.append(acertos_em_ordem[-1])
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
         return True
 
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int) -> bool:
         await self._enviar_embed_pergunta(pergunta, tempo)
-        resposta_correta = pergunta["resposta"]
-        
-        def check(m):
-            return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
-
+        def check(m): return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
         try:
             msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=tempo)
-            
-            if validar_resposta(msg.content, resposta_correta):
+            if validar_resposta(msg.content, pergunta["resposta"]):
                 await msg.add_reaction(EMOJI_ACERTO)
                 await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
                 self.vencedor = msg.author
@@ -138,12 +131,10 @@ class Partida:
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
                 return True
             else:
-                # Se errou na final, agora chama o anúncio de rodada anulada
                 await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
                 await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
                 return False
         except asyncio.TimeoutError:
-            # Se o tempo acabou na final, agora chama o anúncio de rodada anulada
             await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
@@ -167,37 +158,25 @@ class Partida:
                 "Jogador(es) eliminado(os):\n"
                 f"{mencoes}"
             )
-        
         embed = discord.Embed(description=description, color=0xF1C40F)
-        icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
-        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
+        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url="https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp")
         await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         nome_arquivo = pergunta["arquivo"]
         url_imagem = URLS_IMAGENS.get(nome_arquivo)
-
         unique_id = int(time.time())
-        nome_forçado = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
-
-        embed = discord.Embed(
-            description=(
-                "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
-                "Rodada\n"
-                f"<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\n"
-                "Tempo\n"
-                f"<:fale_cronometro:1488631115001626785> **{tempo}**s"
-            ),
-            color=0x060606
-        )
+        nome_forca = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
+        embed = discord.Embed(description=f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\nRodada\n<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\nTempo\n<:fale_cronometro:1488631115001626785> **{tempo}**s", color=0x060606)
+        
         if url_imagem and "http" in url_imagem:
             embed.set_image(url=url_imagem)
             await self.canal.send(embed=embed)
         else:
             try:
                 caminho = get_caminho_imagem(nome_arquivo)
-                file = discord.File(caminho, filename=nome_forçado)
-                embed.set_image(url=f"attachment://{nome_forçado}")
+                file = discord.File(caminho, filename=nome_forca)
+                embed.set_image(url=f"attachment://{nome_forca}")
                 await self.canal.send(file=file, embed=embed)
             except Exception as e:
                 print(f"Erro ao carregar imagem {nome_arquivo}: {e}")
@@ -206,12 +185,6 @@ class Partida:
     async def _encerrar(self):
         self.ativa = False
         if self.vencedor:
-            embed = discord.Embed(
-                description=(
-                    "# <:fale_vencedor:1488653915464663060> Resta apenas 1!\n"
-                    f"Parabéns, {self.vencedor.mention}! Você é o **último restante** no jogo. <:dale_eventos:1478383216581672982>"
-                ),
-                color=0xF1C40F
-            )
+            embed = discord.Embed(description=f"# <:fale_vencedor:1488653915464663060> Resta apenas 1!\nParabéns, {self.vencedor.mention}! Você é o **último restante** no jogo. <:dale_eventos:1478383216581672982>", color=0xF1C40F)
             embed.set_thumbnail(url="https://media.discordapp.net/attachments/1475457661842751548/1488696064579076157/IMG_9600.png?ex=69cdb7c0&is=69cc6640&hm=49e2a616a13482ebc95a0d1edd44a1ed4d14a7574dce86e7e7272a855753b107&=&format=webp&quality=lossless")
             await self.canal.send(embed=embed)
