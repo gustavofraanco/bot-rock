@@ -7,7 +7,7 @@ from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
 
-with open("urls.json", "r", encoding="utf-8") as f:
+with open("urls.json", "r", encoding="utf-8") as f:  
     URLS_IMAGENS: dict = json.load(f)
 
 class Partida:
@@ -178,7 +178,7 @@ class Partida:
         url_imagem = URLS_IMAGENS.get(nome_arquivo)
 
         unique_id = int(time.time())
-        nome_forçado = f"img_{unique_id}_{nome_arquivo}"
+        nome_forçado = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
 
         embed = discord.Embed(
             description=(
@@ -190,14 +190,18 @@ class Partida:
             ),
             color=0x060606
         )
-        if url_imagem:
+        if url_imagem and "http" in url_imagem:
             embed.set_image(url=url_imagem)
             await self.canal.send(embed=embed)
         else:
-            caminho = get_caminho_imagem(nome_arquivo)
-            file = discord.File(caminho, filename=nome_forçado)
-            embed.set_image(url=f"attachment://{nome_forçado}")
-            await self.canal.send(file=file, embed=embed)
+            try:
+                caminho = get_caminho_imagem(nome_arquivo)
+                file = discord.File(caminho, filename=nome_forçado)
+                embed.set_image(url=f"attachment://{nome_forçado}")
+                await self.canal.send(file=file, embed=embed)
+            except Exception as e:
+                print(f"Erro ao carregar imagem {nome_arquivo}: {e}")
+                await self.canal.send("⚠️ Erro ao carregar a imagem desta rodada.")
 
     async def _encerrar(self):
         self.ativa = False
