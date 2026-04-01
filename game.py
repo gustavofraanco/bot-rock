@@ -1,10 +1,13 @@
 import asyncio
 import os
 import discord
-import time
+import json
 from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
+
+with open("urls.json", "r", encoding="utf-8") as f:
+    URLS_IMAGENS: dict = json.load(f)
 
 class Partida:
     def finalizar_forcado(self):
@@ -170,8 +173,8 @@ class Partida:
         await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
-        unique_id = int(time.time())
-        nome_arquivo = f"img_{unique_id}_{pergunta['arquivo']}"
+        nome_arquivo = pergunta["arquivo"]
+        url_imagem = URLS_IMAGENS.get(nome_arquivo)
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -182,10 +185,14 @@ class Partida:
             ),
             color=0x060606
         )
-        caminho = get_caminho_imagem(pergunta["arquivo"])
-        file = discord.File(caminho, filename=nome_arquivo)
-        embed.set_image(url=f"attachment://{nome_arquivo}")
-        await self.canal.send(file=file, embed=embed)
+        if url_imagem:
+            embed.set_image(url=url_imagem)
+            await self.canal.send(embed=embed)
+        else:
+            caminho = get_caminho_imagem(nome_arquivo)
+            file = discord.File(caminho, filename=nome_arquivo)
+            await self.canal.send(embed=embed)
+            await self.canal.send(file=file)
 
     async def _encerrar(self):
         self.ativa = False
