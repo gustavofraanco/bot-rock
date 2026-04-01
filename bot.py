@@ -29,14 +29,15 @@ async def on_ready():
 async def on_message(message: discord.Message):
     if message.author.bot:
         return
-    # Removida a linha que causava conflito de registro manual
     await bot.process_commands(message)
 
+# ── Comando Iniciar ───────────────────────────────────────
 @tree.command(name="resta1", description="Inicia uma partida do Resta 1!")
 async def resta1(interaction: discord.Interaction, rodadas: int, tempo_padrao: int = 30):
     global partida_ativa
+
     if partida_ativa and partida_ativa.ativa:
-        await interaction.response.send_message("⚠️ Já existe uma partida!", ephemeral=True)
+        await interaction.response.send_message("⚠️ Já existe uma partida em andamento!", ephemeral=True)
         return
 
     guild = interaction.guild
@@ -44,16 +45,31 @@ async def resta1(interaction: discord.Interaction, rodadas: int, tempo_padrao: i
     cargo_resta1 = guild.get_role(CARGO_RESTA1_ID)
 
     jogadores = [m for m in guild.members if cargo_resta1 in m.roles and not m.bot]
+
     if len(jogadores) < 2:
-        await interaction.response.send_message("❌ Mínimo 2 jogadores!", ephemeral=True)
+        await interaction.response.send_message("❌ Mínimo de 2 jogadores com o cargo necessário!", ephemeral=True)
         return
 
-    await interaction.response.send_message(f"✅ Iniciado em {canal_jogo.mention}!", ephemeral=False)
+    await interaction.response.send_message(f"✅ Partida iniciada em {canal_jogo.mention}!", ephemeral=False)
 
     partida_ativa = Partida(bot, jogadores, canal_jogo, cargo_resta1, rodadas, tempo_padrao)
     try:
         await partida_ativa.executar()
     finally:
         partida_ativa = None
+
+# ── Comando Finalizar ──────────────────────────────────────
+@tree.command(name="finalizar", description="Para a partida atual imediatamente.")
+@app_commands.checks.has_permissions(administrator=True)
+async def finalizar(interaction: discord.Interaction):
+    global partida_ativa
+
+    if not partida_ativa or not partida_ativa.ativa:
+        await interaction.response.send_message("❌ Não há partida ativa para finalizar.", ephemeral=True)
+        return
+
+    partida_ativa.finalizar_forcado()
+    await interaction.response.send_message("🛑 Partida finalizada manualmente por um administrador.", ephemeral=False)
+    partida_ativa = None
 
 bot.run(TOKEN)
