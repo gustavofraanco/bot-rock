@@ -147,10 +147,10 @@ class Partida:
                 try: await j.remove_roles(self.cargo_resta1)
                 except: pass
             mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
-            desc = f"# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n* A resposta era `{resposta}`\nEliminado(os):\n{mencoes}"
+            desc = f"# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n* A resposta era `{resposta}`\nJogador(es) eliminado(s):\n{mencoes}"
         
         embed = discord.Embed(description=desc, color=0xF1C40F)
-        embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url="https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp")
+        embed.set_footer(text=f"Resta(m) {len(self.jogadores_ativos)} jogador(es)", icon_url="https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp")
         await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
