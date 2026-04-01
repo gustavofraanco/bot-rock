@@ -39,8 +39,8 @@ async def resta1(interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
 
         # Configurações da partida (ajuste os IDs conforme seu servidor)
-        ID_CANAL_JOGO = 1234567890  # Substitua pelo ID do canal de texto do jogo
-        ID_CARGO_JOGADOR = 1234567890  # Substitua pelo ID do cargo dos participantes
+        ID_CANAL_JOGO = int(os.getenv("CANAL_JOGO_ID"))
+        ID_CARGO_JOGADOR = int(os.getenv("CARGO_RESTA1_ID"))
         
         canal_jogo = bot.get_channel(ID_CANAL_JOGO)
         cargo_participante = interaction.guild.get_role(ID_CARGO_JOGADOR)
