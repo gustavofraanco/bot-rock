@@ -8,14 +8,14 @@ from questions import sortear_perguntas, get_caminho_imagem, validar_resposta, c
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
 
-# --- Carregamento Protegido do JSON (Anti-Crash Windows/ANSI/UTF-8) ---
+# --- Carregamento Protegido do JSON (Suporte para Windows e UTF-8) ---
 URLS_IMAGENS = {}
 try:
     with open("urls.json", "r", encoding="utf-8") as f:
         URLS_IMAGENS = json.load(f)
 except (UnicodeDecodeError, json.JSONDecodeError):
     try:
-        # Tenta codificação do Windows se o UTF-8 falhar
+        # Tenta abrir no formato do Windows se o padrão falhar
         with open("urls.json", "r", encoding="cp1252") as f:
             URLS_IMAGENS = json.load(f)
     except Exception as e:
@@ -35,7 +35,7 @@ class Partida:
         self.cargo_resta1 = cargo_resta1
         self.tempo_padrao = tempo_padrao
         
-        # Sistema de NÃO REPETIÇÃO: Embaralha todas as perguntas no início
+        # Sistema de NÃO REPETIÇÃO: Carrega e embaralha tudo no início
         todas = carregar_perguntas()
         random.shuffle(todas)
         self.perguntas_disponiveis = todas
@@ -75,7 +75,7 @@ class Partida:
         await self.anunciar_inicio()
         
         while self.ativa and len(self.jogadores_ativos) > 1 and self.perguntas_disponiveis:
-            # Pega a próxima pergunta da lista embaralhada
+            # Pega a próxima da lista (já embaralhada no __init__)
             pergunta = self.perguntas_disponiveis.pop(0)
             self.usadas.append(pergunta)
             
@@ -91,7 +91,7 @@ class Partida:
                 if len(self.jogadores_ativos) > 1:
                     await asyncio.sleep(10)
             else:
-                # Rodada anulada: espera e o loop pega a PRÓXIMA (não repetida)
+                # Rodada anulada: espera 10s e o loop pega a PRÓXIMA pergunta da lista
                 await asyncio.sleep(10)
                 if not self.perguntas_disponiveis:
                     self.perguntas_disponiveis = list(self.usadas)
@@ -168,7 +168,7 @@ class Partida:
             description = (
                 "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
                 f"* A resposta era `{resposta}`\n"
-                "Jogador(es) eliminado(s):\n"
+                "Jogador(es) eliminado(os):\n"
                 f"{mencoes}"
             )
         embed = discord.Embed(description=description, color=0xF1C40F)
@@ -179,8 +179,8 @@ class Partida:
         nome_arquivo = pergunta["arquivo"]
         url_imagem = URLS_IMAGENS.get(nome_arquivo)
         unique_id = int(time.time())
-        # Anti-cache para garantir qualidade total
-        nome_forca = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
+        # Nome do anexo limpo e único
+        nome_final = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
 
         embed = discord.Embed(
             description=(
@@ -191,18 +191,20 @@ class Partida:
             color=0x060606
         )
         
-        # IMAGEM FORA DO EMBED: Enviamos o embed e a imagem separadamente na mesma mensagem
         if url_imagem and "http" in url_imagem:
-            # Envia o link da imagem no 'content' para o Discord expandir fora da caixa do embed
-            await self.canal.send(content=url_imagem, embed=embed)
+            # Para links externos
+            embed.set_image(url=url_imagem)
+            await self.canal.send(embed=embed)
         else:
             try:
+                # Para arquivos locais: garante que o Discord "abra" a imagem
                 caminho = get_caminho_imagem(nome_arquivo)
-                file = discord.File(caminho, filename=nome_forca)
-                # Enviando 'file' sem usar 'embed.set_image' faz ela ficar solta abaixo
+                file = discord.File(caminho, filename=nome_final)
+                embed.set_image(url=f"attachment://{nome_final}")
                 await self.canal.send(file=file, embed=embed)
-            except:
-                await self.canal.send(f"⚠️ Erro ao carregar a imagem: {nome_arquivo}", embed=embed)
+            except Exception as e:
+                print(f"Erro ao carregar imagem: {e}")
+                await self.canal.send(f"⚠️ Erro ao carregar: {nome_arquivo}", embed=embed)
 
     async def _encerrar(self):
         self.ativa = False
