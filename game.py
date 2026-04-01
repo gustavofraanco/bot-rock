@@ -34,8 +34,8 @@ class Partida:
 
     def calcular_tempo_dinamico(self) -> int:
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15: return 20
-        elif 10 <= qtd < 15: return 13
+        if qtd > 15: return 20
+        elif 10 <= qtd <= 15: return 13
         elif 3 <= qtd < 10: return 7
         else: return 5
 
