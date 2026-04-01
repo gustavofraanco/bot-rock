@@ -20,23 +20,18 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
-        """Proporção de tempo baseada na quantidade de jogadores."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15:
-            return 20
-        elif 10 <= qtd < 15:
-            return 13
-        elif 5 <= qtd < 10:
-            return 7
-        else: # De 5 a 2 pessoas
-            return 4
+        if qtd >= 15: return 20
+        elif 10 <= qtd < 15: return 13
+        elif 5 <= qtd < 10: return 7
+        else: return 4
 
     @property
     def is_ultima_rodada(self) -> bool:
         return len(self.jogadores_ativos) == 2
 
     async def anunciar_inicio(self):
-        """Novo Embed Principal (#060606) com imagem e sem menções."""
+        """Embed RESTA 1 - ALEMÃO (#060606)"""
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
@@ -46,14 +41,13 @@ class Partida:
                 "• Na rodada final, o **primeiro a acertar** vence!\n\n"
                 "<:fale_tempo:1488683795422122065> Inicia em **10** segundos..."
             ),
-            color=discord.Color(0x060606)
+            color=0x060606
         )
-        embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg?ex=69cdc5c4&is=69cc7444&hm=c958b56450e99955be6ba46c9f4f696eb39d6c0b2cfe1aab94160edfad32fdc4&=&format=webp")
+        embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg?ex=69cdc5c4&is=69cc7444&hm=c958b56450e99955be6ba46c9f4f696eb39d6c0b2cfe1aab94160edfad32fdc4")
         await self.canal.send(embed=embed)
         await asyncio.sleep(10)
 
     async def executar(self):
-        """Loop principal da partida. Removido o embed azul de anúncio antigo."""
         await self.anunciar_inicio()
         
         for i, pergunta in enumerate(self.perguntas):
@@ -77,9 +71,7 @@ class Partida:
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int):
         await self._enviar_embed_pergunta(pergunta, tempo)
-
         resposta_correta = pergunta["resposta"]
-        respostas: dict[discord.Member, discord.Message] = {}
         acertos_em_ordem: list[discord.Member] = []
 
         def check(m: discord.Message):
@@ -90,33 +82,30 @@ class Partida:
             tempo_restante = tempo - (asyncio.get_event_loop().time() - inicio)
             try:
                 msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, tempo_restante))
-                respostas[msg.author] = msg 
                 if validar_resposta(msg.content, resposta_correta):
                     if msg.author not in acertos_em_ordem:
                         acertos_em_ordem.append(msg.author)
-                        await msg.add_reaction(EMOJI_ACERTO)
+                        try: await msg.add_reaction(EMOJI_ACERTO)
+                        except: pass
             except asyncio.TimeoutError:
                 break
 
-        # Embed de Tempo Esgotado (#EB7309)
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-
+        
         eliminados: list[discord.Member] = []
         for jogador in list(self.jogadores_ativos):
             if jogador not in acertos_em_ordem:
                 eliminados.append(jogador)
 
-        todos_acertaram = (len(eliminados) == 0 and len(acertos_em_ordem) == len(self.jogadores_ativos))
-        if todos_acertaram and acertos_em_ordem:
+        if len(eliminados) == 0 and len(acertos_em_ordem) == len(self.jogadores_ativos):
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
 
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int):
         await self._enviar_embed_pergunta(pergunta, tempo)
-
         resposta_correta = pergunta["resposta"]
-        mensagens_enviadas: list[discord.Message] = []
+        mensagens_enviadas: list[discord.Member] = []
 
         def check(m: discord.Message):
             return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
@@ -126,9 +115,11 @@ class Partida:
             tempo_restante = tempo - (asyncio.get_event_loop().time() - inicio)
             try:
                 msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, tempo_restante))
-                mensagens_enviadas.append(msg)
+                if msg.author not in mensagens_enviadas: mensagens_enviadas.append(msg.author)
+                
                 if validar_resposta(msg.content, resposta_correta):
-                    await msg.add_reaction(EMOJI_ACERTO)
+                    try: await msg.add_reaction(EMOJI_ACERTO)
+                    except: pass
                     self.vencedor = msg.author
                     perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                     await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
@@ -138,12 +129,11 @@ class Partida:
                 break
 
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-        eliminado = mensagens_enviadas[-1].author if mensagens_enviadas else self.jogadores_ativos[0]
+        eliminado = mensagens_enviadas[-1] if mensagens_enviadas else self.jogadores_ativos[0]
         await self._anunciar_eliminados(pergunta["resposta"], [eliminado])
         if self.jogadores_ativos: self.vencedor = self.jogadores_ativos[0]
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
-        """Embed de Pergunta (#060606) sem (FINAL) e sem menções."""
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -161,7 +151,6 @@ class Partida:
         await self.canal.send(file=file, embed=embed)
 
     async def _anunciar_eliminados(self, resposta, eliminados):
-        """Embed de Rodada Finalizada (#F1C40F) com ícone no footer."""
         for j in eliminados:
             if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
             try: await j.remove_roles(self.cargo_resta1)
@@ -182,7 +171,6 @@ class Partida:
         await self.canal.send(embed=embed)
 
     async def _encerrar(self):
-        """Embed de Vencedor (#870606) com Thumbnail."""
         self.ativa = False
         if self.vencedor:
             embed = discord.Embed(
