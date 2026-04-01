@@ -157,7 +157,7 @@ class Partida:
             description = (
                 "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
                 f"* A resposta era `{resposta}`\n"
-                "Jogador(es) eliminado(os):\n"
+                "Jogador(es) eliminado(s):\n"
                 f"{mencoes}"
             )
         
