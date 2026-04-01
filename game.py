@@ -3,28 +3,26 @@ import os
 import discord
 import json
 import time
-from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
+import random
+from questions import sortear_perguntas, get_caminho_imagem, validar_resposta, carregar_perguntas
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
 
-# --- BLOCO DE CARREGAMENTO CORRIGIDO ---
+# --- Carregamento Protegido do JSON (Anti-Crash Windows/UTF-8) ---
 URLS_IMAGENS = {}
 try:
-    # Tenta abrir no formato padrão (UTF-8)
     with open("urls.json", "r", encoding="utf-8") as f:
         URLS_IMAGENS = json.load(f)
 except (UnicodeDecodeError, json.JSONDecodeError):
     try:
-        # Se der erro de caractere (comum no Windows), tenta o formato do sistema (CP1252)
         with open("urls.json", "r", encoding="cp1252") as f:
             URLS_IMAGENS = json.load(f)
     except Exception as e:
         print(f"Erro crítico ao carregar urls.json: {e}")
-# ---------------------------------------
 
 class Partida:
     def finalizar_forcado(self):
-        """Define a partida como inativa imediatamente."""
+        """Para a partida imediatamente."""
         self.ativa = False
 
     def __init__(self, bot: discord.Client, jogadores: list[discord.Member],
@@ -35,7 +33,13 @@ class Partida:
         self.canal = canal
         self.cargo_resta1 = cargo_resta1
         self.tempo_padrao = tempo_padrao
-        self.perguntas = sortear_perguntas(num_rodadas)
+        
+        # Lógica de Não Repetição: Carrega tudo e embaralha
+        todas = carregar_perguntas()
+        random.shuffle(todas)
+        self.perguntas_disponiveis = todas
+        self.usadas = []
+        
         self.rodada_atual = 0
         self.ativa = True
         self.vencedor: discord.Member | None = None
@@ -68,31 +72,34 @@ class Partida:
 
     async def executar(self):
         await self.anunciar_inicio()
-        idx_pergunta = 0
-        while idx_pergunta < len(self.perguntas):
-            if not self.ativa or len(self.jogadores_ativos) <= 1:
-                break
-            pergunta = self.perguntas[idx_pergunta]
+        
+        while self.ativa and len(self.jogadores_ativos) > 1 and self.perguntas_disponiveis:
+            pergunta = self.perguntas_disponiveis.pop(0)
+            self.usadas.append(pergunta)
+            
             self.rodada_atual += 1
             tempo = self.calcular_tempo_dinamico()
+
             if self.is_ultima_rodada:
                 sucesso = await self._rodar_ultima_rodada(pergunta, tempo)
             else:
                 sucesso = await self._rodar_rodada_normal(pergunta, tempo)
 
             if sucesso:
-                idx_pergunta += 1
-                if idx_pergunta < len(self.perguntas) and len(self.jogadores_ativos) > 1:
+                if len(self.jogadores_ativos) > 1:
                     await asyncio.sleep(10)
             else:
+                # Se ninguém acertou, espera 10s e o loop pega a PRÓXIMA pergunta inédita
                 await asyncio.sleep(10)
-                nova_pergunta = sortear_perguntas(1)[0]
-                self.perguntas[idx_pergunta] = nova_pergunta
-                self.rodada_atual -= 1 
+                if not self.perguntas_disponiveis: # Reset se acabarem as fotos
+                    self.perguntas_disponiveis = list(self.usadas)
+                    random.shuffle(self.perguntas_disponiveis)
+                    self.usadas = []
 
             if len(self.jogadores_ativos) == 1:
                 self.vencedor = self.jogadores_ativos[0]
                 break
+
         await self._encerrar()
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int) -> bool:
@@ -100,6 +107,7 @@ class Partida:
         resposta_correta = pergunta["resposta"]
         acertos_em_ordem = []
         def check(m): return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
+
         inicio = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - inicio < tempo:
             restante = tempo - (asyncio.get_event_loop().time() - inicio)
@@ -109,10 +117,13 @@ class Partida:
                     acertos_em_ordem.append(msg.author)
                     await msg.add_reaction(EMOJI_ACERTO)
             except asyncio.TimeoutError: break
+
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
+        
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
+
         eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
         if not eliminados: eliminados.append(acertos_em_ordem[-1])
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
@@ -155,7 +166,7 @@ class Partida:
             description = (
                 "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
                 f"* A resposta era `{resposta}`\n"
-                "Jogador(es) eliminado(os):\n"
+                "Jogador(es) eliminado(s):\n"
                 f"{mencoes}"
             )
         embed = discord.Embed(description=description, color=0xF1C40F)
@@ -166,7 +177,8 @@ class Partida:
         nome_arquivo = pergunta["arquivo"]
         url_imagem = URLS_IMAGENS.get(nome_arquivo)
         unique_id = int(time.time())
-        nome_forca = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
+        nome_forçado = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
+
         embed = discord.Embed(description=f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\nRodada\n<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\nTempo\n<:fale_cronometro:1488631115001626785> **{tempo}**s", color=0x060606)
         
         if url_imagem and "http" in url_imagem:
@@ -175,12 +187,11 @@ class Partida:
         else:
             try:
                 caminho = get_caminho_imagem(nome_arquivo)
-                file = discord.File(caminho, filename=nome_forca)
-                embed.set_image(url=f"attachment://{nome_forca}")
+                file = discord.File(caminho, filename=nome_forçado)
+                embed.set_image(url=f"attachment://{nome_forçado}")
                 await self.canal.send(file=file, embed=embed)
-            except Exception as e:
-                print(f"Erro ao carregar imagem {nome_arquivo}: {e}")
-                await self.canal.send("⚠️ Erro ao carregar a imagem desta rodada.")
+            except:
+                await self.canal.send(f"⚠️ Erro ao carregar a imagem: {nome_arquivo}")
 
     async def _encerrar(self):
         self.ativa = False
