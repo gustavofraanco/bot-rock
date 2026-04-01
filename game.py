@@ -106,7 +106,7 @@ class Partida:
             except asyncio.TimeoutError:
                 break
 
-        await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xF1C40F))
+        await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
         
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
@@ -131,14 +131,14 @@ class Partida:
             
             if validar_resposta(msg.content, resposta_correta):
                 await msg.add_reaction(EMOJI_ACERTO)
-                await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xF1C40F))
+                await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
                 self.vencedor = msg.author
                 perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
                 return True
             return False
         except asyncio.TimeoutError:
-            await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xF1C40F))
+            await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
             return False
 
     async def _anunciar_eliminados(self, resposta, eliminados, ninguem_acertou=False):
@@ -161,7 +161,7 @@ class Partida:
                 f"{mencoes}"
             )
         
-        embed = discord.Embed(description=description, color=0xEB7309)
+        embed = discord.Embed(description=description, color=0xF1C40F)
         icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
         embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
         await self.canal.send(embed=embed)
@@ -195,7 +195,7 @@ class Partida:
                     "# <:fale_vencedor:1488653915464663060> Resta apenas 1!\n"
                     f"Parabéns, {self.vencedor.mention}! Você é o **último restante** no jogo. <:dale_eventos:1478383216581672982>"
                 ),
-                color=0x870606
+                color=0xEB7309
             )
             embed.set_thumbnail(url="https://media.discordapp.net/attachments/1475457661842751548/1488696064579076157/IMG_9600.png?ex=69cdb7c0&is=69cc6640&hm=49e2a616a13482ebc95a0d1edd44a1ed4d14a7574dce86e7e7272a855753b107&=&format=webp&quality=lossless")
             await self.canal.send(embed=embed)
