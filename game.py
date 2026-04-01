@@ -8,21 +8,9 @@ from questions import sortear_perguntas, get_caminho_imagem, validar_resposta, c
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
 
-# --- Carregamento Protegido do JSON (Anti-Crash Windows/UTF-8) ---
-URLS_IMAGENS = {}
-try:
-    with open("urls.json", "r", encoding="utf-8") as f:
-        URLS_IMAGENS = json.load(f)
-except (UnicodeDecodeError, json.JSONDecodeError):
-    try:
-        with open("urls.json", "r", encoding="cp1252") as f:
-            URLS_IMAGENS = json.load(f)
-    except Exception as e:
-        print(f"Erro crítico ao carregar urls.json: {e}")
-
 class Partida:
     def finalizar_forcado(self):
-        """Para a partida imediatamente."""
+        """Define a partida como inativa imediatamente."""
         self.ativa = False
 
     def __init__(self, bot: discord.Client, jogadores: list[discord.Member],
@@ -34,7 +22,7 @@ class Partida:
         self.cargo_resta1 = cargo_resta1
         self.tempo_padrao = tempo_padrao
         
-        # Lógica de Não Repetição: Carrega tudo e embaralha
+        # Sistema de NÃO REPETIÇÃO: Carrega todas e embaralha
         todas = carregar_perguntas()
         random.shuffle(todas)
         self.perguntas_disponiveis = todas
@@ -89,9 +77,9 @@ class Partida:
                 if len(self.jogadores_ativos) > 1:
                     await asyncio.sleep(10)
             else:
-                # Se ninguém acertou, espera 10s e o loop pega a PRÓXIMA pergunta inédita
+                # Se ninguém acertou, espera 10s e o loop pega a PRÓXIMA inédita
                 await asyncio.sleep(10)
-                if not self.perguntas_disponiveis: # Reset se acabarem as fotos
+                if not self.perguntas_disponiveis:
                     self.perguntas_disponiveis = list(self.usadas)
                     random.shuffle(self.perguntas_disponiveis)
                     self.usadas = []
@@ -152,50 +140,46 @@ class Partida:
 
     async def _anunciar_eliminados(self, resposta, eliminados, ninguem_acertou=False):
         if ninguem_acertou:
-            description = (
-                "# <:fale_finalizada:1488692025984553241> Rodada anulada!\n"
-                f"* A resposta era `{resposta}`\n"
-                "<:dale_atencao:1478412503036989480> **Ninguém acertou!** A rodada será reiniciada com uma nova imagem."
-            )
+            desc = f"# <:fale_finalizada:1488692025984553241> Rodada anulada!\n* A resposta era `{resposta}`\n<:dale_atencao:1478412503036989480> **Ninguém acertou!** A rodada será reiniciada."
         else:
             for j in eliminados:
                 if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
                 try: await j.remove_roles(self.cargo_resta1)
                 except: pass
             mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
-            description = (
-                "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
-                f"* A resposta era `{resposta}`\n"
-                "Jogador(es) eliminado(os):\n"
-                f"{mencoes}"
-            )
-        embed = discord.Embed(description=description, color=0xF1C40F)
+            desc = f"# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n* A resposta era `{resposta}`\nEliminado(os):\n{mencoes}"
+        
+        embed = discord.Embed(description=desc, color=0xF1C40F)
         embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url="https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp")
         await self.canal.send(embed=embed)
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         nome_arquivo = pergunta["arquivo"]
-        url_imagem = URLS_IMAGENS.get(nome_arquivo)
         unique_id = int(time.time())
-        nome_forçado = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
+        nome_final = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
 
-        embed = discord.Embed(description=f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\nRodada\n<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\nTempo\n<:fale_cronometro:1488631115001626785> **{tempo}**s", color=0x060606)
+        embed = discord.Embed(
+            description=(
+                f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
+                f"Rodada\n<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\n"
+                f"Tempo\n<:fale_cronometro:1488631115001626785> **{tempo}**s"
+            ),
+            color=0x060606
+        )
         
-        if url_imagem and "http" in url_imagem:
-            embed.set_image(url=url_imagem)
-            await self.canal.send(embed=embed)
-        else:
-            try:
-                caminho = get_caminho_imagem(nome_arquivo)
-                file = discord.File(caminho, filename=nome_forçado)
-                embed.set_image(url=f"attachment://{nome_forçado}")
-                await self.canal.send(file=file, embed=embed)
-            except:
-                await self.canal.send(f"⚠️ Erro ao carregar a imagem: {nome_arquivo}")
+        try:
+            # SEMPRE pega da pasta local agora
+            caminho = get_caminho_imagem(nome_arquivo)
+            file = discord.File(caminho, filename=nome_final)
+            embed.set_image(url=f"attachment://{nome_final}")
+            await self.canal.send(file=file, embed=embed)
+        except Exception as e:
+            print(f"Erro ao carregar imagem local {nome_arquivo}: {e}")
+            await self.canal.send(f"⚠️ Erro ao carregar a imagem: {nome_arquivo}", embed=embed)
 
     async def _encerrar(self):
         self.ativa = False
         if self.vencedor:
-            embed = discord.Embed(description=f"# <:fale_vencedor:1488653915464663060> Resta apenas 1!\nParabéns, {self.vencedor.mention}! Você é o **último restante** no jogo. <:dale_eventos:1478383216581672982>", color=0xF1C40F)
+            embed = discord.Embed(description=f"# <:fale_vencedor:1488653915464663060> Resta apenas 1!\nParabéns, {self.vencedor.mention}! Você venceu! <:dale_eventos:1478383216581672982>", color=0xF1C40F)
             embed.set_thumbnail(url="https://media.discordapp.net/attachments/1475457661842751548/1488696064579076157/IMG_9600.png?ex=69cdb7c0&is=69cc6640&hm=49e2a616a13482ebc95a0d1edd44a1ed4d14a7574dce86e7e7272a855753b107&=&format=webp&quality=lossless")
             await self.canal.send(embed=embed)
