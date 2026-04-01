@@ -41,7 +41,6 @@ class Partida:
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
-                "ㅤ\n"
                 "## <:gaale_regras:1488678788115075072> Instruções\n\n"
                 "* A cada rodada, o **último a responder** é eliminado.\n"
                 "* Na rodada final, o **primeiro a acertar** vence!\n\n"
@@ -175,7 +174,6 @@ class Partida:
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
-                "ㅤ\n"
                 "Rodada\n"
                 f"<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\n"
                 "Tempo\n"
