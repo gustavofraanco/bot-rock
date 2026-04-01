@@ -155,9 +155,8 @@ class Partida:
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         nome_arquivo = pergunta["arquivo"]
-        unique_id = int(time.time())
-        nome_final = f"img_{unique_id}_{nome_arquivo.replace('', 'u')}"
-
+        
+        # Criamos o Embed primeiro
         embed = discord.Embed(
             description=(
                 f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -168,24 +167,20 @@ class Partida:
         )
         
         try:
-            # DEFINE O CAMINHO DIRETO: Pasta 'imagens' no mesmo local do game.py
-            diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-            caminho = os.path.join(diretorio_atual, "imagens", nome_arquivo)
+            # Pega o caminho da imagem (certifique-se que get_caminho_imagem está correto)
+            caminho = get_caminho_imagem(nome_arquivo)
             
-            # DEBUG: Isso vai mostrar no seu terminal onde o bot está tentando olhar
-            if not os.path.exists(caminho):
-                print(f"❌ ARQUIVO NÃO ENCONTRADO: {caminho}")
-                await self.canal.send(f"⚠️ Não achei o arquivo `{nome_arquivo}` na pasta `imagens`.", embed=embed)
-                return
-
-            file = discord.File(caminho, filename=nome_final)
-            embed.set_image(url=f"attachment://{nome_final}")
+            # Criamos o arquivo do Discord. 
+            # O 'filename' aqui deve ser EXATAMENTE o que vai no 'attachment://'
+            file = discord.File(caminho, filename=nome_arquivo)
+            embed.set_image(url=f"attachment://{nome_arquivo}")
             
+            # Enviamos o arquivo JUNTO com o embed
             await self.canal.send(file=file, embed=embed)
             
         except Exception as e:
-            print(f"❌ ERRO AO ENVIAR: {e}")
-            await self.canal.send(f"⚠️ Erro técnico: {e}", embed=embed)
+            print(f"❌ ERRO AO CARREGAR {nome_arquivo}: {e}")
+            await self.canal.send(f"⚠️ Erro ao carregar imagem: {nome_arquivo}", embed=embed)
 
     async def _encerrar(self):
         self.ativa = False
