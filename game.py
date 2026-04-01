@@ -20,11 +20,16 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
+        """Mantém o padrão de tempo solicitado."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15: return 20
-        elif 10 <= qtd < 15: return 13
-        elif 3 <= qtd < 10: return 7
-        else: return 5
+        if qtd >= 15:
+            return 20
+        elif 10 <= qtd < 15:
+            return 13
+        elif 3 <= qtd < 10:
+            return 7
+        else: # Só 2 pessoas
+            return 5
 
     @property
     def is_ultima_rodada(self) -> bool:
@@ -66,9 +71,9 @@ class Partida:
             if sucesso:
                 idx_pergunta += 1
             else:
-                # Se ninguém acertou, esperamos 10 segundos antes de reiniciar a rodada
+                # Distância de 10 segundos entre o embed de finalizada e a nova imagem
                 await asyncio.sleep(10)
-                # Sorteamos uma nova pergunta
+                # Sorteia uma nova pergunta e mantém o número da rodada
                 nova_pergunta = sortear_perguntas(1)[0]
                 self.perguntas[idx_pergunta] = nova_pergunta
                 self.rodada_atual -= 1 
@@ -106,7 +111,7 @@ class Partida:
             return False
 
         eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
-        if not eliminados:
+        if not eliminados: # Todos acertaram
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
@@ -171,10 +176,9 @@ class Partida:
             color=0x060606
         )
         caminho = get_caminho_imagem(pergunta["arquivo"])
-        # Geramos um nome único para o anexo para evitar que o Discord use cache de imagens pequenas
-        nome_anexo = f"rodada_{self.rodada_atual}_{pergunta['arquivo']}"
-        file = discord.File(caminho, filename=nome_anexo)
-        embed.set_image(url=f"attachment://{nome_anexo}")
+        # Correção para imagens pequenas: usa um nome de arquivo fixo e limpa anexos anteriores
+        file = discord.File(caminho, filename="imagem_pergunta.png")
+        embed.set_image(url="attachment://imagem_pergunta.png")
         await self.canal.send(file=file, embed=embed)
 
     async def _encerrar(self):
