@@ -31,7 +31,6 @@ class Partida:
         return len(self.jogadores_ativos) == 2
 
     async def anunciar_inicio(self):
-        """Embed RESTA 1 - ALEMÃO (#060606)"""
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
@@ -49,55 +48,61 @@ class Partida:
 
     async def executar(self):
         await self.anunciar_inicio()
-        
         for i, pergunta in enumerate(self.perguntas):
             if not self.ativa or len(self.jogadores_ativos) <= 1:
                 break
-
             self.rodada_atual = i + 1
             tempo = self.calcular_tempo_dinamico()
-
             if self.is_ultima_rodada:
                 await self._rodar_ultima_rodada(pergunta, tempo)
                 break
             else:
                 await self._rodar_rodada_normal(pergunta, tempo)
-
             if len(self.jogadores_ativos) == 1:
                 self.vencedor = self.jogadores_ativos[0]
                 break
-
         await self._encerrar()
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int):
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
-        acertos_em_ordem: list[discord.Member] = []
+        acertos_em_ordem = []
+        respondeu_errado = []
 
-        def check(m: discord.Message):
+        def check(m):
             return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
 
         inicio = asyncio.get_event_loop().time()
         while asyncio.get_event_loop().time() - inicio < tempo:
-            tempo_restante = tempo - (asyncio.get_event_loop().time() - inicio)
+            # Se todos já interagiram, podemos encerrar o tempo mais cedo
+            if len(acertos_em_ordem) + len(respondeu_errado) == len(self.jogadores_ativos):
+                break
+            
+            restante = tempo - (asyncio.get_event_loop().time() - inicio)
             try:
-                msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, tempo_restante))
+                msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, restante))
+                if msg.author in acertos_em_ordem or msg.author in respondeu_errado:
+                    continue
+
                 if validar_resposta(msg.content, resposta_correta):
-                    if msg.author not in acertos_em_ordem:
-                        acertos_em_ordem.append(msg.author)
-                        try: await msg.add_reaction(EMOJI_ACERTO)
-                        except: pass
+                    acertos_em_ordem.append(msg.author)
+                    try: await msg.add_reaction(EMOJI_ACERTO)
+                    except: pass
+                else:
+                    respondeu_errado.append(msg.author)
             except asyncio.TimeoutError:
                 break
 
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
         
-        eliminados: list[discord.Member] = []
-        for jogador in list(self.jogadores_ativos):
-            if jogador not in acertos_em_ordem:
-                eliminados.append(jogador)
-
-        if len(eliminados) == 0 and len(acertos_em_ordem) == len(self.jogadores_ativos):
+        eliminados = []
+        # 1. Quem errou ou não respondeu
+        for j in self.jogadores_ativos:
+            if j not in acertos_em_ordem:
+                eliminados.append(j)
+        
+        # 2. Se todos acertaram, o último a acertar é eliminado
+        if not eliminados and len(acertos_em_ordem) == len(self.jogadores_ativos):
             eliminados.append(acertos_em_ordem[-1])
 
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
@@ -105,33 +110,24 @@ class Partida:
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int):
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
-        mensagens_enviadas: list[discord.Member] = []
-
-        def check(m: discord.Message):
+        
+        def check(m):
             return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
 
-        inicio = asyncio.get_event_loop().time()
-        while asyncio.get_event_loop().time() - inicio < tempo:
-            tempo_restante = tempo - (asyncio.get_event_loop().time() - inicio)
-            try:
-                msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, tempo_restante))
-                if msg.author not in mensagens_enviadas: mensagens_enviadas.append(msg.author)
-                
-                if validar_resposta(msg.content, resposta_correta):
-                    try: await msg.add_reaction(EMOJI_ACERTO)
-                    except: pass
-                    self.vencedor = msg.author
-                    perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
-                    await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-                    await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
-                    return
-            except asyncio.TimeoutError:
-                break
-
-        await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
-        eliminado = mensagens_enviadas[-1] if mensagens_enviadas else self.jogadores_ativos[0]
-        await self._anunciar_eliminados(pergunta["resposta"], [eliminado])
-        if self.jogadores_ativos: self.vencedor = self.jogadores_ativos[0]
+        try:
+            msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=tempo)
+            await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
+            
+            if validar_resposta(msg.content, resposta_correta):
+                self.vencedor = msg.author
+                perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
+                await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
+            else:
+                # Se o primeiro a responder na final errar, ele perde
+                await self._anunciar_eliminados(pergunta["resposta"], [msg.author])
+        except asyncio.TimeoutError:
+            await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
+            await self._anunciar_eliminados(pergunta["resposta"], [self.jogadores_ativos[0]])
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         embed = discord.Embed(
@@ -156,13 +152,13 @@ class Partida:
             try: await j.remove_roles(self.cargo_resta1)
             except: pass
 
-        lista_eliminados = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
+        mencoes = "\n".join([f"<:dale_errado:1488652581428527125> {j.mention}" for j in eliminados])
         embed = discord.Embed(
             description=(
                 "# <:fale_finalizada:1488692025984553241> Rodada finalizada!\n"
                 f"• A resposta era `{resposta}`\n"
                 "Jogador(es) eliminado(os):\n"
-                f"{lista_eliminados}"
+                f"{mencoes if mencoes else 'Ninguém'}"
             ),
             color=0xF1C40F
         )
