@@ -2,6 +2,7 @@ import asyncio
 import os
 import discord
 import json
+import time
 from questions import sortear_perguntas, get_caminho_imagem, validar_resposta
 
 EMOJI_ACERTO = os.getenv("EMOJI_ACERTO", "✅")
@@ -175,6 +176,10 @@ class Partida:
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
         nome_arquivo = pergunta["arquivo"]
         url_imagem = URLS_IMAGENS.get(nome_arquivo)
+
+        unique_id = int(time.time())
+        nome_forçado = f"img_{unique_id}_{nome_arquivo}"
+
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -190,9 +195,9 @@ class Partida:
             await self.canal.send(embed=embed)
         else:
             caminho = get_caminho_imagem(nome_arquivo)
-            file = discord.File(caminho, filename=nome_arquivo)
-            await self.canal.send(embed=embed)
-            await self.canal.send(file=file)
+            file = discord.File(caminho, filename=nome_forçado)
+            embed.set_image(url=f"attachment://{nome_forçado}")
+            await self.canal.send(file=file, embed=embed)
 
     async def _encerrar(self):
         self.ativa = False

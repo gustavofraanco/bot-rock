@@ -6,8 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv("MTQ4ODYwNjI4MzQ0MjQyMTc3MA.G5iu23.KPbT8jDEnO6eFyxeFaD8hPGlolJXIuHwAKighg")
-CANAL_CDN_ID = int(os.getenv("1488885431083733132"))
+TOKEN = "MTQ4ODYwNjI4MzQ0MjQyMTc3MA.G5iu23.KPbT8jDEnO6eFyxeFaD8hPGlolJXIuHwAKighg"
+CANAL_CDN_ID = 1488885431083733132
 PASTA_IMAGENS = "imagens"  # sua pasta com os .webp
 
 intents = discord.Intents.default()
