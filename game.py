@@ -20,18 +20,23 @@ class Partida:
         self.vencedor: discord.Member | None = None
 
     def calcular_tempo_dinamico(self) -> int:
+        """Proporção de tempo baseada na quantidade de jogadores."""
         qtd = len(self.jogadores_ativos)
-        if qtd >= 15: return 20
-        elif 10 <= qtd < 15: return 13
-        elif 5 <= qtd < 10: return 7
-        else: return 4
+        if qtd >= 15:
+            return 20
+        elif 10 <= qtd < 15:
+            return 13
+        elif 5 <= qtd < 10:
+            return 7
+        else: # De 5 a 2 pessoas
+            return 4
 
     @property
     def is_ultima_rodada(self) -> bool:
         return len(self.jogadores_ativos) == 2
 
     async def anunciar_inicio(self):
-        """Embed RESTA 1 - ALEMÃO atualizado (#060606)"""
+        """Novo Embed Principal (#060606) com imagem e sem menções."""
         embed = discord.Embed(
             description=(
                 "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
@@ -48,7 +53,7 @@ class Partida:
         await asyncio.sleep(10)
 
     async def executar(self):
-        # O embed antigo "A Partida Começou" foi removido daqui
+        """Loop principal da partida. Removido o embed azul de anúncio antigo."""
         await self.anunciar_inicio()
         
         for i, pergunta in enumerate(self.perguntas):
@@ -71,7 +76,7 @@ class Partida:
         await self._encerrar()
 
     async def _rodar_rodada_normal(self, pergunta: dict, tempo: int):
-        await self._enviar_embed_pergunta(pergunta, tempo) # Menções removidas
+        await self._enviar_embed_pergunta(pergunta, tempo)
 
         resposta_correta = pergunta["resposta"]
         respostas: dict[discord.Member, discord.Message] = {}
@@ -93,6 +98,7 @@ class Partida:
             except asyncio.TimeoutError:
                 break
 
+        # Embed de Tempo Esgotado (#EB7309)
         await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0xEB7309))
 
         eliminados: list[discord.Member] = []
@@ -107,7 +113,7 @@ class Partida:
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
 
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int):
-        await self._enviar_embed_pergunta(pergunta, tempo) # (FINAL) e Menções removidas
+        await self._enviar_embed_pergunta(pergunta, tempo)
 
         resposta_correta = pergunta["resposta"]
         mensagens_enviadas: list[discord.Message] = []
@@ -137,7 +143,7 @@ class Partida:
         if self.jogadores_ativos: self.vencedor = self.jogadores_ativos[0]
 
     async def _enviar_embed_pergunta(self, pergunta: dict, tempo: int):
-        # Removido o parâmetro de menções e a lógica de (FINAL)
+        """Embed de Pergunta (#060606) sem (FINAL) e sem menções."""
         embed = discord.Embed(
             description=(
                 "# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
@@ -155,6 +161,7 @@ class Partida:
         await self.canal.send(file=file, embed=embed)
 
     async def _anunciar_eliminados(self, resposta, eliminados):
+        """Embed de Rodada Finalizada (#F1C40F) com ícone no footer."""
         for j in eliminados:
             if j in self.jogadores_ativos: self.jogadores_ativos.remove(j)
             try: await j.remove_roles(self.cargo_resta1)
@@ -170,12 +177,12 @@ class Partida:
             ),
             color=0xF1C40F
         )
-        # Footer com ícone personalizado solicitado
         icon_url = "https://images-ext-1.discordapp.net/external/PZRe1YDxbibtfjepaLXCwL4f_tceKC7mPAON8xo-KQk/%3Fsize%3D2048/https/cdn.discordapp.com/emojis/1488693040636891235.png?format=webp"
         embed.set_footer(text=f"Restam {len(self.jogadores_ativos)} jogadores", icon_url=icon_url)
         await self.canal.send(embed=embed)
 
     async def _encerrar(self):
+        """Embed de Vencedor (#870606) com Thumbnail."""
         self.ativa = False
         if self.vencedor:
             embed = discord.Embed(
