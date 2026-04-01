@@ -185,7 +185,7 @@ class Partida:
             
         except Exception as e:
             print(f"❌ ERRO AO ENVIAR: {e}")
-            await self.canal.send(f"⚠️ Erro técnico: {e}", embed=embed
+            await self.canal.send(f"⚠️ Erro técnico: {e}", embed=embed)
 
     async def _encerrar(self):
         self.ativa = False
