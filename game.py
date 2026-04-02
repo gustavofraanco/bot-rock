@@ -94,6 +94,8 @@ class Partida:
         await self._enviar_embed_pergunta(pergunta, tempo)
         resposta_correta = pergunta["resposta"]
         acertos_em_ordem = []
+        ja_processados = set()
+
         def check(m): return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
 
         inicio = asyncio.get_event_loop().time()
@@ -101,42 +103,48 @@ class Partida:
             restante = tempo - (asyncio.get_event_loop().time() - inicio)
             try:
                 msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, restante))
-                if msg.author not in acertos_em_ordem and validar_resposta(msg.content, resposta_correta):
+                if msg.author.id not in ja_processados and validar_resposta(msg.content, resposta_correta):
                     acertos_em_ordem.append(msg.author)
+                    ja_processados.add(msg.author.id)
                     await msg.add_reaction(EMOJI_ACERTO)
-            except asyncio.TimeoutError: break
+            except asyncio.TimeoutError:
+                break
 
         await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
-        
+
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
 
         eliminados = [j for j in self.jogadores_ativos if j not in acertos_em_ordem]
-        if not eliminados: eliminados.append(acertos_em_ordem[-1])
+        if not eliminados:
+            eliminados.append(acertos_em_ordem[-1])
         await self._anunciar_eliminados(pergunta["resposta"], eliminados)
         return True
 
     async def _rodar_ultima_rodada(self, pergunta: dict, tempo: int) -> bool:
         await self._enviar_embed_pergunta(pergunta, tempo)
         def check(m): return m.channel == self.canal and m.author in self.jogadores_ativos and not m.author.bot
-        try:
-            msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=tempo)
-            if validar_resposta(msg.content, pergunta["resposta"]):
-                await msg.add_reaction(EMOJI_ACERTO)
-                await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
-                self.vencedor = msg.author
-                perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
-                await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
-                return True
-            else:
-                await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
-                await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
-                return False
-        except asyncio.TimeoutError:
-            await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
-            await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
-            return False
+
+        inicio = asyncio.get_event_loop().time()
+        while asyncio.get_event_loop().time() - inicio < tempo:
+            restante = tempo - (asyncio.get_event_loop().time() - inicio)
+            try:
+                msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=max(0, restante))
+                if validar_resposta(msg.content, pergunta["resposta"]):
+                    await msg.add_reaction(EMOJI_ACERTO)
+                    await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
+                    self.vencedor = msg.author
+                    perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
+                    await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
+                    return True
+                # Se errou, ignora e continua escutando
+            except asyncio.TimeoutError:
+                break
+
+        await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
+        await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
+        return False
 
     async def _anunciar_eliminados(self, resposta, eliminados, ninguem_acertou=False):
         if ninguem_acertou:
