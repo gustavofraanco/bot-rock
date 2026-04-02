@@ -46,13 +46,13 @@ class Partida:
     async def anunciar_inicio(self):
         embed = discord.Embed(
             description=(
-                "# <:fale_restou:1488655051890233546> RESTA 1 - ALEMÃO\n"
-                "## <:gaale_regras:1488678788115075072> Instruções\n\n"
-                "* A cada rodada, o **último a responder** é eliminado.\n"
-                "* Na rodada final, o **primeiro a acertar** vence!\n\n"
-                "<:fale_tempo:1488683795422122065> Inicia em **10** segundos..."
+                "# <:1maloik2:1475933659830681701> RESTA 1 - ALEMÃO\n"
+                "## <:instrucoes:1489402952107032707> Instruções\n\n"
+                "* O **último a responder** é eliminado.\n"
+                "* Na rodada final, o **primeiro a acertar** vence.\n\n"
+                "<:cronometro:1489402442255695934> A partida iniciará em **10** segundos..."
             ),
-            color=0x060606
+            color=0x010101
         )
         embed.set_image(url="https://media.discordapp.net/attachments/1488604956364767543/1488711115452973087/IMG_9638.jpg")
         await self.canal.send(embed=embed)
@@ -106,7 +106,7 @@ class Partida:
                     await msg.add_reaction(EMOJI_ACERTO)
             except asyncio.TimeoutError: break
 
-        await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
+        await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
         
         if not acertos_em_ordem:
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
@@ -124,17 +124,17 @@ class Partida:
             msg = await asyncio.wait_for(self.bot.wait_for("message", check=check), timeout=tempo)
             if validar_resposta(msg.content, pergunta["resposta"]):
                 await msg.add_reaction(EMOJI_ACERTO)
-                await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
+                await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
                 self.vencedor = msg.author
                 perdedor = [j for j in self.jogadores_ativos if j != self.vencedor][0]
                 await self._anunciar_eliminados(pergunta["resposta"], [perdedor])
                 return True
             else:
-                await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
+                await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
                 await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
                 return False
         except asyncio.TimeoutError:
-            await self.canal.send(embed=discord.Embed(description="<:fale_cronometro:1488631115001626785> **Acabou o tempo!**", color=0x870606))
+            await self.canal.send(embed=discord.Embed(description="<:cronometro:1489402442255695934> **Acabou o tempo!**", color=0x870606))
             await self._anunciar_eliminados(pergunta["resposta"], [], ninguem_acertou=True)
             return False
 
@@ -159,9 +159,9 @@ class Partida:
         # Criamos o Embed primeiro
         embed = discord.Embed(
             description=(
-                f"# <:dale_info:1478237600908054548> ACERTE A IMAGEM\n"
-                f"Rodada\n<:fale_rodada:1488649428989382987> **{self.rodada_atual}**\n"
-                f"Tempo\n<:fale_cronometro:1488631115001626785> **{tempo}**s"
+                f"# <:1maloik:1475577923678245006> ACERTE A IMAGEM\n"
+                f"**Rodada**\n<:1caixadesom:1475582147250229431> **{self.rodada_atual}**\n"
+                f"**Tempo**\n<:cronometro:1489402442255695934> **{tempo}**s"
             ),
             color=0x060606
         )
